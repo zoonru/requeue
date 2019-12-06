@@ -1,0 +1,20 @@
+{
+    "name": "zoon/requeue",
+    "description": "Redis delayed message queue without locks",
+    "keywords": [
+        "schedule",
+        "queue"
+    ],
+    "homepage": "https://github.com/zoonru/requeue",
+    "type": "library",
+    "license": "GPL-3.0-only",
+    "require": {
+        "php": ">=7.1",
+        "ext-redis": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Zoon\\ReQueue\\": "src/"
+        }
+    }
+}
