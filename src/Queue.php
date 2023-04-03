@@ -106,13 +106,13 @@ final class Queue implements QueueInterface {
 				$this->client->unwatch();
 				continue;
 			}
-			if (
-				($timestampRange->getMin() !== null && $messageData->getTimestamp() < $timestampRange->getMin()) ||
-				($timestampRange->getMax() !== null && $messageData->getTimestamp() > $timestampRange->getMax())
-			) {
-				$this->client->unwatch();
-				continue;
-			}
+			//if (
+			//	($timestampRange->getMin() !== null && $messageData->getTimestamp() < $timestampRange->getMin()) ||
+			//	($timestampRange->getMax() !== null && $messageData->getTimestamp() > $timestampRange->getMax())
+			//) {
+			//	$this->client->unwatch();
+			//	continue;
+			//}
 			$this->client->multi();
 			$this->client->del($dataKey);
 			$this->client->zRem($this->timestampIndexKey, $id);
