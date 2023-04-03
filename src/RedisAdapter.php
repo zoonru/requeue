@@ -102,7 +102,7 @@ class RedisAdapter implements RedisAdapterInterface {
 	 */
 	public function zRem(string $key, string $member): void {
 		$res = $this->redis->zRem($key, $member);
-		if ($res === 0) {
+		if ($res === 0 || $res instanceof Redis) {
 			$was = $this->compressionFix();
 			$this->redis->zRem($key, $member);
 			$this->compressionFix($was);
