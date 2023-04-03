@@ -100,7 +100,10 @@ class RedisAdapter implements RedisAdapterInterface {
 	 * @param string $member
 	 */
 	public function zRem(string $key, string $member): void {
-		$this->redis->zRem($key, $member);
+		$result = $this->redis->zRem($key, $member);
+		if (!$result) {
+			$this->redis->rawCommand('zRem', $key, $member);
+		}
 	}
 
 	/**
@@ -113,7 +116,10 @@ class RedisAdapter implements RedisAdapterInterface {
 		$this->validateAtomicRedisMode();
 		$score = $this->redis->zScore($key, $member);
 		if ($score === false) {
-			return null;
+			$score = $this->redis->rawCommand('zScore', $key, $member);
+			if ($score === false) {
+				return null;
+			}
 		}
 		return $score;
 	}
