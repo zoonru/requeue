@@ -91,7 +91,7 @@ final class Queue implements QueueInterface {
 		$timestampRange = $timestampRange ?? new TimestampRange();
 		$retries = 0;
 		while ($retries++ <= $retryLimit) {
-			$idInArray = $this->client->zRangeByScope(
+			$idInArray = $this->client->zRangeByScore(
 				$this->timestampIndexKey,
 				$timestampRange
 			);
@@ -157,7 +157,7 @@ final class Queue implements QueueInterface {
 	 */
 	public function clear(?TimestampRangeInterface $timestampRange = null): void {
 		while (true) {
-			$list = $this->client->zRangeByScope($this->timestampIndexKey, $timestampRange, self::CLEAR_BUFFER_SIZE);
+			$list = $this->client->zRangeByScore($this->timestampIndexKey, $timestampRange, self::CLEAR_BUFFER_SIZE);
 			if (count($list) === 0) {
 				return;
 			}
@@ -167,7 +167,7 @@ final class Queue implements QueueInterface {
 				$this->client->watch($this->getDataKey($id));
 			}
 			$this->client->multi();
-			$this->client->zRemRangeByScope($this->timestampIndexKey, $timestampRange);
+			$this->client->zRemRangeByScore($this->timestampIndexKey, $timestampRange);
 			foreach ($list as $id) {
 				$this->client->del($this->getDataKey($id));
 			}
