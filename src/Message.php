@@ -2,9 +2,12 @@
 
 namespace Zoon\ReQueue;
 
-final class Message extends MessageData implements MessageInterface {
+final class Message {
 
-	private $id;
+	private string $id;
+
+    private int $timestamp;
+    private string $data;
 
 	/**
 	 * Message constructor.
@@ -13,7 +16,8 @@ final class Message extends MessageData implements MessageInterface {
 	 * @param string $data
 	 */
 	public function __construct(string $id, int $timestamp, string $data) {
-		parent::__construct($timestamp, $data);
+        $this->timestamp = $timestamp;
+        $this->data = $data;
 		$this->id = $id;
 	}
 
@@ -23,5 +27,19 @@ final class Message extends MessageData implements MessageInterface {
 	public function getId(): string {
 		return $this->id;
 	}
+
+    /**
+     * @return int
+     */
+    public function getTimestamp(): int {
+        return $this->timestamp;
+    }
+
+    /**
+     * @return string
+     */
+    public function getData(): string {
+        return $this->data;
+    }
 
 }

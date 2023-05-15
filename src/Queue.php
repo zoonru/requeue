@@ -7,47 +7,30 @@ use Zoon\ReQueue\Exception\InvalidUpdateCallbackException;
 use Zoon\ReQueue\Exception\PushException;
 use Zoon\ReQueue\Exception\RetryLimitException;
 
-final class Queue implements QueueInterface {
+final class Queue {
 
 	private const DEFAULT_DATA_KEY_PREFIX = 'dmq:data:';
 	private const DEFAULT_TIMESTAMP_INDEX_KEY = 'dmq:tsIndex';
 	private const CLEAR_BUFFER_SIZE = 1000;
 
-	private $client;
-	private $dataKeyPrefix;
-	private $timestampIndexKey;
-
-	/**
-	 * Queue constructor.
-	 * @param RedisAdapterInterface $redis
-	 * @param string $dataKeyPrefix
-	 * @param string $timestampIndexKey
-	 */
 	public function __construct(
-		RedisAdapterInterface $redis,
-		string $dataKeyPrefix = self::DEFAULT_DATA_KEY_PREFIX,
-		string $timestampIndexKey = self::DEFAULT_TIMESTAMP_INDEX_KEY
+		private RedisAdapter $client,
+		private string $dataKeyPrefix = self::DEFAULT_DATA_KEY_PREFIX,
+		private string $timestampIndexKey = self::DEFAULT_TIMESTAMP_INDEX_KEY
 	) {
-		$this->client = $redis;
-		$this->dataKeyPrefix = $dataKeyPrefix;
-		$this->timestampIndexKey = $timestampIndexKey;
 	}
 
 	/**
-	 * @param MessageInterface $message
+	 * @param Message $message
 	 * @throws PushException
 	 */
-	public function push(MessageInterface $message): void {
+	public function push(Message $message): void {
 		if ($this->tryPush($message) === false) {
 			throw new PushException();
 		}
 	}
 
-	/**
-	 * @param MessageInterface $message
-	 * @return bool
-	 */
-	private function tryPush(MessageInterface $message): bool {
+	private function tryPush(Message $message): bool|array {
 		$this->client->multi();
 		$this->client->set($this->getDataKey($message->getId()), $message->getData());
 		$this->client->zAdd($this->timestampIndexKey, $message->getTimestamp(), $message->getId());
@@ -67,12 +50,12 @@ final class Queue implements QueueInterface {
 		$retries = 0;
 		while ($retries++ <= $retryLimit) {
 			$this->client->watch($this->getDataKey($id));
-			/** @var MessageDataInterface $updatedMessage */
-			$updatedMessageData = $updateCallback($this->getMessageData($id));
-			if (!($updatedMessageData instanceof MessageDataInterface)) {
+			/** @var Message $updatedMessage */
+			$updatedMessage = $updateCallback($this->getMessage($id));
+			if (!($updatedMessage instanceof Message)) {
 				throw new InvalidUpdateCallbackException();
 			}
-			if ($this->tryPush(new Message($id, $updatedMessageData->getTimestamp(), $updatedMessageData->getData())) === false) {
+			if ($this->tryPush(new Message($id, $updatedMessage->getTimestamp(), $updatedMessage->getData())) === false) {
 				continue;
 			}
 			return;
@@ -81,14 +64,10 @@ final class Queue implements QueueInterface {
 	}
 
 	/**
-	 * @param TimestampRangeInterface|null $timestampRange
-	 * @param int $retryLimit
-	 * @return MessageInterface|null
 	 * @throws InvalidRetryLimitException
 	 */
-	public function pop(?TimestampRangeInterface $timestampRange = null, int $retryLimit = 1000): ?MessageInterface {
+	public function pop(TimestampRange $timestampRange = new TimestampRange(), int $retryLimit = 1000): ?Message {
 		self::validateRetryLimit($retryLimit);
-		$timestampRange = $timestampRange ?? new TimestampRange();
 		$retries = 0;
 		while ($retries++ <= $retryLimit) {
 			$idInArray = $this->client->zRangeByScore(
@@ -101,34 +80,24 @@ final class Queue implements QueueInterface {
 			$id = $idInArray[0];
 			$dataKey = $this->getDataKey($id);
 			$this->client->watch($dataKey);
-			$messageData = $this->getMessageData($id);
-			if ($messageData === null) {
+			$message = $this->getMessage($id);
+			if ($message === null) {
 				$this->client->unwatch();
 				continue;
 			}
-			//if (
-			//	($timestampRange->getMin() !== null && $messageData->getTimestamp() < $timestampRange->getMin()) ||
-			//	($timestampRange->getMax() !== null && $messageData->getTimestamp() > $timestampRange->getMax())
-			//) {
-			//	$this->client->unwatch();
-			//	continue;
-			//}
+
 			$this->client->multi();
 			$this->client->del($dataKey);
 			$this->client->zRem($this->timestampIndexKey, $id);
 			if ($this->client->exec() === false) {
 				continue;
 			}
-			return new Message($id, $messageData->getTimestamp(), $messageData->getData());
+			return new Message($id, $message->getTimestamp(), $message->getData());
 		}
 		return null;
 	}
 
-	/**
-	 * @param string $id
-	 * @return MessageDataInterface|null
-	 */
-	private function getMessageData(string $id): ?MessageDataInterface {
+	private function getMessage(string $id): ?Message {
 		$timestamp = $this->client->zScore($this->timestampIndexKey, $id);
 		if ($timestamp === null) {
 			return null;
@@ -137,25 +106,17 @@ final class Queue implements QueueInterface {
 		if ($data === null) {
 			return null;
 		}
-		return new MessageData($timestamp, $data);
+		return new Message($id, $timestamp, $data);
 	}
 
-	/**
-	 * @param TimestampRangeInterface|null $timestampRange
-	 * @return int
-	 */
-	public function count(?TimestampRangeInterface $timestampRange = null): int {
+	public function count(TimestampRange $timestampRange = new TimestampRange()): int {
 		return $this->client->zCount(
 			$this->timestampIndexKey,
 			$timestampRange
 		);
 	}
 
-	/**
-	 * @param TimestampRangeInterface|null $timestampRange
-	 * @throws RetryLimitException
-	 */
-	public function clear(?TimestampRangeInterface $timestampRange = null): void {
+	public function clear(TimestampRange $timestampRange = new TimestampRange()): void {
 		while (true) {
 			$list = $this->client->zRangeByScore($this->timestampIndexKey, $timestampRange, self::CLEAR_BUFFER_SIZE);
 			if (count($list) === 0) {

@@ -21,7 +21,7 @@ if (!$redis->connect('127.0.0.1')) {
 }
 $queue = createQueue($redis);
 
-function createQueue(\Redis $connection): \Zoon\ReQueue\QueueInterface {
+function createQueue(\Redis $connection): \Zoon\ReQueue\Queue {
 	$redisAdapter = new \Zoon\ReQueue\RedisAdapter($connection);
 	return new \Zoon\ReQueue\Queue($redisAdapter);
 }
@@ -32,7 +32,7 @@ $queue->push(new \Zoon\ReQueue\Message('id', time() + 3600, 'data'));
 ```
 **Update**
 ```php
-$queue->update('id', function (?\Zoon\ReQueue\MessageDataInterface $old) {
+$queue->update('id', function (?\Zoon\ReQueue\Message $old) {
 	$time = ($old === null ? time() + 3600 : $old->getTimestamp() + 600);
 	$data = ($old === null ? 'data' : $old->getData() . '+new');
 	return new \Zoon\ReQueue\MessageData($time, $data);

@@ -5,33 +5,17 @@ namespace Zoon\ReQueue;
 use Redis;
 use Zoon\ReQueue\Exception\NotAtomicRedisModeException;
 
-class RedisAdapter implements RedisAdapterInterface {
+/** @mixin Redis */
+class RedisAdapter {
 
-	private Redis $redis;
-
-	/**
-	 * RedisAdapter constructor.
-	 * @param \Redis $redis
-	 */
-	public function __construct(Redis $redis) {
-		$this->redis = $redis;
+	public function __construct(private readonly Redis $redis) {
 	}
-
-	public function multi(): void {
-		$this->redis->multi(Redis::MULTI);
-	}
-
-	public function pipeline(): void {
-		$this->redis->multi(Redis::PIPELINE);
-	}
-
-	/**
-	 * @param string $key
-	 * @param string $value
-	 */
-	public function set(string $key, string $value): void {
-		$this->redis->set($key, $value);
-	}
+    
+    public function __call(string $name, array $arguments)
+    {
+        $this->validateAtomicRedisMode();
+        return $this->redis->$name(...$arguments);
+    }
 
 	/**
 	 * @param string $key
@@ -43,57 +27,24 @@ class RedisAdapter implements RedisAdapterInterface {
 	}
 
 	/**
-	 * @return bool
-	 */
-	public function exec(): bool {
-		return $this->redis->exec() !== false;
-	}
-
-	/**
-	 * @param string $key
-	 */
-	public function watch(string $key): void {
-		$this->redis->watch($key);
-	}
-
-	/**
-	 * @param string $key
-	 * @param TimestampRangeInterface|null $timestampRange
-	 * @param int $limit
-	 * @return array
 	 * @throws NotAtomicRedisModeException
 	 */
-	public function zRangeByScore(string $key, ?TimestampRangeInterface $timestampRange, int $limit = 1): array {
+	public function zRangeByScore(string $key, TimestampRange $timestampRange = new TimestampRange(), int $limit = 1): array {
 		$this->validateAtomicRedisMode();
 		return $this->redis->zRangeByScore(
 			$key,
-			self::getMinForRedis($timestampRange?->getMin()),
-			self::getMaxForRedis($timestampRange?->getMax()),
+			self::getMinForRedis($timestampRange->getMin()),
+			self::getMaxForRedis($timestampRange->getMax()),
 			['limit' => [0, $limit]],
 		);
 	}
 
-	/**
-	 * @param string $key
-	 * @param TimestampRangeInterface|null $timestampRange
-	 */
-	public function zRemRangeByScore(string $key, ?TimestampRangeInterface $timestampRange): void {
+	public function zRemRangeByScore(string $key, TimestampRange $timestampRange = new TimestampRange()): void {
 		$this->redis->zRemRangeByScore(
 			$key,
-			self::getMinForRedis($timestampRange?->getMin()),
-			self::getMaxForRedis($timestampRange?->getMax()),
+			self::getMinForRedis($timestampRange->getMin()),
+			self::getMaxForRedis($timestampRange->getMax()),
 		);
-	}
-
-	public function unwatch(): void {
-		$this->redis->unwatch();
-	}
-
-	/**
-	 * @param string $key
-	 */
-	public function del(string $key): void {
-		$this->redis->del($key);
 	}
 
 	/**
@@ -149,25 +100,18 @@ class RedisAdapter implements RedisAdapterInterface {
 	}
 
 	/**
-	 * @param string $key
-	 * @param TimestampRangeInterface|null $timestampRange
-	 * @return int
 	 * @throws NotAtomicRedisModeException
 	 */
-	public function zCount(string $key, ?TimestampRangeInterface $timestampRange): int {
+	public function zCount(string $key, TimestampRange $timestampRange = new TimestampRange()): int {
 		$this->validateAtomicRedisMode();
 		return $this->redis->zCount(
 			$key,
-			self::getMinForRedis($timestampRange?->getMin()),
-			self::getMaxForRedis($timestampRange?->getMax()),
+			self::getMinForRedis($timestampRange->getMin()),
+			self::getMaxForRedis($timestampRange->getMax()),
 		);
 	}
 
-	/**
-	 * @param int|null $min
-	 * @return string
-	 */
-	private static function getMinForRedis(?int $min): int|string {
+	private static function getMinForRedis(?int $min): string {
 		return $min ?? '-inf';
 	}
 
@@ -175,7 +119,7 @@ class RedisAdapter implements RedisAdapterInterface {
 	 * @param int|null $max
 	 * @return string
 	 */
-	private static function getMaxForRedis(?int $max): int|string {
+	private static function getMaxForRedis(?int $max): string {
 		return $max ?? '+inf';
 	}
 

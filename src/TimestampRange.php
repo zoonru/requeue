@@ -2,22 +2,20 @@
 
 namespace Zoon\ReQueue;
 
-final class TimestampRange implements TimestampRangeInterface {
-
-	private $min;
-	private $max;
+final class TimestampRange {
 
 	/**
 	 * TimestampRange constructor.
 	 * @param int|null $min
 	 * @param int|null $max
 	 */
-	public function __construct(?int $min = null, ?int $max = null) {
-		if ($min !== null && $max !== null && $max < $min) {
+	public function __construct(
+        private ?int $min = null,
+        private ?int $max = null
+    ) {
+		if ($this->min !== null && $this->max !== null && $this->max < $this->min) {
 			throw new \InvalidArgumentException('max < min');
 		}
-		$this->min = $min;
-		$this->max = $max;
 	}
 
 	/**
