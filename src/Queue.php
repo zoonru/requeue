@@ -90,6 +90,7 @@ final class Queue {
 			$this->client->del($dataKey);
 			$this->client->zRem($this->timestampIndexKey, $id);
 			if ($this->client->exec() === false) {
+                trigger_error('Unable to exec', E_USER_WARNING);
 				continue;
 			}
 			return new Message($id, $message->getTimestamp(), $message->getData());
@@ -100,10 +101,12 @@ final class Queue {
 	private function getMessage(string $id): ?Message {
 		$timestamp = $this->client->zScore($this->timestampIndexKey, $id);
 		if ($timestamp === null) {
+            trigger_error('zScore not found', E_USER_WARNING);
 			return null;
 		}
 		$data = $this->client->get($this->getDataKey($id));
 		if ($data === null) {
+            trigger_error('Data key not found', E_USER_WARNING);
 			return null;
 		}
 		return new Message($id, $timestamp, $data);
