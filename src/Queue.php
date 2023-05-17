@@ -82,6 +82,7 @@ final class Queue {
 			$this->client->watch($dataKey);
 			$message = $this->getMessage($id);
 			if ($message === null) {
+                trigger_error('Message not found', E_USER_WARNING);
 				$this->client->unwatch();
 				continue;
 			}
@@ -101,12 +102,10 @@ final class Queue {
 	private function getMessage(string $id): ?Message {
 		$timestamp = $this->client->zScore($this->timestampIndexKey, $id);
 		if ($timestamp === null) {
-            trigger_error('zScore not found', E_USER_WARNING);
 			return null;
 		}
 		$data = $this->client->get($this->getDataKey($id));
 		if ($data === null) {
-            trigger_error('Data key not found', E_USER_WARNING);
 			return null;
 		}
 		return new Message($id, $timestamp, $data);
