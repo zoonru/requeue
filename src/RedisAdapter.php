@@ -13,7 +13,6 @@ class RedisAdapter {
     
     public function __call(string $name, array $arguments)
     {
-        $this->validateAtomicRedisMode();
         return $this->redis->$name(...$arguments);
     }
 
