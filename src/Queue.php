@@ -3,7 +3,6 @@
 namespace Zoon\ReQueue;
 
 use Zoon\ReQueue\Exception\InvalidRetryLimitException;
-use Zoon\ReQueue\Exception\InvalidUpdateCallbackException;
 use Zoon\ReQueue\Exception\PushException;
 use Zoon\ReQueue\Exception\RetryLimitException;
 
@@ -38,29 +37,72 @@ final class Queue {
 	}
 
 	/**
-	 * @param string $id
-	 * @param callable $updateCallback
-	 * @param int $retryLimit
-	 * @throws InvalidRetryLimitException
-	 * @throws InvalidUpdateCallbackException
-	 * @throws RetryLimitException
+	 * @param list<Message> $messages
 	 */
-	public function update(string $id, callable $updateCallback, int $retryLimit = 1000): void {
+	public function putMessages(array $messages, MessageReducer $messageReducer, int $retryLimit = 3): void {
 		self::validateRetryLimit($retryLimit);
-		$retries = 0;
-		while ($retries++ <= $retryLimit) {
-			$this->client->watch($this->getDataKey($id));
-			/** @var Message $updatedMessage */
-			$updatedMessage = $updateCallback($this->getMessage($id));
-			if (!($updatedMessage instanceof Message)) {
-				throw new InvalidUpdateCallbackException();
-			}
-			if ($this->tryPush(new Message($id, $updatedMessage->getTimestamp(), $updatedMessage->getData())) === false) {
-				continue;
-			}
+		if (\count($messages) === 0) {
 			return;
 		}
+
+		$keys = [];
+		foreach ($messages as $message) {
+			$keys[] = $this->getDataKey($message->getId());
+		}
+
+		for ($attemptNo = 0; $attemptNo < $retryLimit; ++$attemptNo) {
+			$this->client->watch(...$keys);
+
+			$oldMessages = $this->client->mGet($keys);
+			$newMessages = [];
+			foreach ($keys as $i => $key) {
+				$oldMessage = $oldMessages[$i];
+				if ($oldMessage === false) {
+					$newMessages[] = $messages[$i];
+				} else {
+					// when the version of redis => 6.2.0 and ZMSCORE is available, it's possible to reconstruct the message without the ZSCORE and the second GET 
+					$oldMessage = $this->getMessage($messages[$i]->getId());
+					if ($oldMessage !== null) {
+						$newMessages[] = $messageReducer->reduce($oldMessage, $messages[$i]);
+					} else {
+						$newMessages[] = $messages[$i];
+					}
+				}
+			}
+
+			$this->client->multi();
+
+			$this->client->mSet($this->messagesToMSetArg($newMessages));
+			$this->client->zAdd($this->timestampIndexKey, ...$this->messagesToZAddArgs($newMessages));
+
+			if ($this->client->exec() !== false) {
+				return;
+			}
+		}
+
 		throw new RetryLimitException();
+	}
+
+	/**
+	 * @param list<Message> $messages
+	 * @return array<string, string>
+	 */
+	private function messagesToMSetArg(array $messages): array {
+		$mSetArg = [];
+		foreach ($messages as $message) {
+			$mSetArg[$this->getDataKey($message->getId())] = $message->getData();
+		}
+		return $mSetArg;
+	}
+
+	/**
+	 * @param list<Message> $messages
+	 * @return list<string>
+	 */
+	private function messagesToZAddArgs(array $messages): array {
+		return array_merge(
+			...array_map(static fn (Message $message): array => [$message->getTimestamp(), $message->getId()], $messages),
+		);
 	}
 
 	/**
