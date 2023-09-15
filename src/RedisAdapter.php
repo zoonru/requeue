@@ -18,11 +18,9 @@ class RedisAdapter {
 
 	/**
 	 * @param string $key
-	 * @param string $score
-	 * @param string $value
 	 */
-	public function zAdd(string $key, string $score, string $value): void {
-		$this->redis->zAdd($key, [], $score, $value);
+	public function zAdd(string $key, ...$scores): void {
+		$this->redis->zAdd($key, [], ...$scores);
 	}
 
 	/**
